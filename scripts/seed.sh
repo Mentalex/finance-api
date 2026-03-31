@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_URL="http://localhost:8080"
+BASE_URL="https://finance-api-production-081c.up.railway.app"
 
 echo "🌱 Seeding database..."
 
