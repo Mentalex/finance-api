@@ -15,7 +15,12 @@ TOKEN=$(curl -s -X POST $BASE_URL/login \
   -H "Content-Type: application/json" \
   -d '{"email": "ada@example.com", "password": "secret123"}' | jq -r '.token')
 
-echo "Token: $TOKEN"
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+  echo "❌ Login failed — stopping."
+  exit 1
+fi
+
+echo "✅ Token obtained"
 
 # ── Create accounts ────────────────────────────────────────────
 echo "\n→ Creating accounts..."
