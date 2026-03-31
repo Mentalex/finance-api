@@ -26,7 +26,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://postgres:password@db:5432/finance?sslmode=disable
-      JWT_SECRET: 2f3a650cfb2b8643114884cbdeb966366e7ac762eed2c0b95017bcd9020e26ec6753b94a0564d5c28db007584624e1540b9b04c3d74df4ebe5035f9491998ee3
+    env_file:
+      - .env
 
 volumes:
   postgres_data:
