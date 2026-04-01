@@ -39,7 +39,9 @@ func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.db.QueryContext(r.Context(), "SELECT * FROM transactions WHERE account_id = $1 ORDER BY created_at DESC", accountID)
+	rows, err := h.db.QueryContext(
+		r.Context(),
+		"SELECT id, account_id, amount, type, description, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC", accountID)
 	if err != nil {
 		h.logger.Error("failed to query transactions", "error", err)
 		errInternal(w)
@@ -59,7 +61,6 @@ func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(txns)
 }
 
@@ -85,7 +86,7 @@ func (h *TransactionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var tx Transaction
 	err := h.db.QueryRowContext(
 		r.Context(),
-		"SELECT * FROM transactions WHERE id = $1 AND account_id = $2", txID, accountID,
+		"SELECT id, account_id, amount, type, description, created_at FROM transactions WHERE id = $1 AND account_id = $2", txID, accountID,
 	).Scan(&tx.ID, &tx.AccountID, &tx.Amount, &tx.Type, &tx.Description, &tx.CreatedAt)
 	if err == sql.ErrNoRows {
 		errNotFound(w, "transaction not found")
@@ -98,7 +99,6 @@ func (h *TransactionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(tx)
 }
 

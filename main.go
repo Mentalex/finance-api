@@ -43,7 +43,7 @@ func main() {
 	})
 
 	authHandler := api.NewAuthHandler(db, logger)
-	accountHandler := api.NewAccountsHandler(db, logger)
+	accountHandler := api.NewAccountHandler(db, logger)
 	transactionHandler := api.NewTransactionHandler(db, logger)
 
 	// Auth routes

@@ -22,12 +22,12 @@ type AccountHandler struct {
 	logger *slog.Logger
 }
 
-func NewAccountsHandler(db *sql.DB, logger *slog.Logger) *AccountHandler {
+func NewAccountHandler(db *sql.DB, logger *slog.Logger) *AccountHandler {
 	return &AccountHandler{db: db, logger: logger}
 }
 
 func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.QueryContext(r.Context(), "SELECT * FROM accounts")
+	rows, err := h.db.QueryContext(r.Context(), "SELECT id, name, balance FROM accounts")
 	if err != nil {
 		h.logger.Error("failed to query accounts", "error", err)
 		errInternal(w)
@@ -122,7 +122,7 @@ func (h *AccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var account Account
 	err := h.db.QueryRowContext(
 		r.Context(),
-		"SELECT * FROM accounts WHERE id = $1", id,
+		"SELECT id, name, balance FROM accounts WHERE id = $1", id,
 	).Scan(&account.ID, &account.Name, &account.Balance)
 
 	if err == sql.ErrNoRows {
@@ -137,7 +137,6 @@ func (h *AccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) // Return a 200 OK
 	json.NewEncoder(w).Encode(account)
 }
 
@@ -186,12 +185,16 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Return the updated account
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) // Return a 200 OK
 	json.NewEncoder(w).Encode(account)
 }
 
 func (h *AccountHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+
+	if _, err := uuid.Parse(id); err != nil {
+		errBadRequest(w, "invalid ID format")
+		return
+	}
 
 	var account Account
 	var transactions []Transaction
@@ -215,7 +218,9 @@ func (h *AccountHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		defer rows.Close()
 		for rows.Next() {
 			var t Transaction
-			rows.Scan(&t.ID, &t.AccountID, &t.Amount, &t.Type, &t.Description, &t.CreatedAt)
+			if err := rows.Scan(&t.ID, &t.AccountID, &t.Amount, &t.Type, &t.Description, &t.CreatedAt); err != nil {
+				return err
+			}
 			transactions = append(transactions, t)
 		}
 		return nil
