@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"finance-api/internal/api"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -16,21 +16,25 @@ import (
 
 func main() {
 	godotenv.Load()
-	// fmt.Println("DB URL:", os.Getenv("DATABASE_URL"))
+
+	// Set up structured JSON logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 
 	db, err := sql.Open("pgx", os.Getenv("DATABASE_URL"))
 	if err != nil {
-		log.Fatal("Failed to open database: ", err)
+		slog.Error("failed to open database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		log.Fatal("Failed to connect to database: ", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
-	fmt.Println("Successfully connected to the database!")
+	slog.Info("connected to database")
 
 	r := chi.NewRouter()
-
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
@@ -38,12 +42,13 @@ func main() {
 		fmt.Fprintln(w, "ok")
 	})
 
-	authHandler := api.NewAuthHandler(db)
+	authHandler := api.NewAuthHandler(db, logger)
+	accountHandler := api.NewAccountsHandler(db, logger)
+	transactionHandler := api.NewTransactionHandler(db, logger)
+
+	// Auth routes
 	r.Post("/register", authHandler.Register)
 	r.Post("/login", authHandler.Login)
-
-	accountHandler := api.NewAccountsHandler(db)
-	transactionHandler := api.NewTransactionHandler(db)
 
 	r.Group(func(r chi.Router) {
 		r.Use(api.AuthMiddleware)
@@ -62,6 +67,6 @@ func main() {
 		r.Get("/accounts/{id}/transactions/{txID}", transactionHandler.Get)
 	})
 
-	fmt.Print("Server is running on 8080...\n")
+	slog.Info("server running", "port", 8080)
 	http.ListenAndServe(":8080", r)
 }

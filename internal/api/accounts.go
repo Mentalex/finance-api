@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -17,16 +18,18 @@ type Account struct {
 }
 
 type AccountHandler struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewAccountsHandler(db *sql.DB) *AccountHandler {
-	return &AccountHandler{db: db}
+func NewAccountsHandler(db *sql.DB, logger *slog.Logger) *AccountHandler {
+	return &AccountHandler{db: db, logger: logger}
 }
 
 func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.QueryContext(r.Context(), "SELECT * FROM accounts")
 	if err != nil {
+		h.logger.Error("failed to query accounts", "error", err)
 		errInternal(w)
 		return
 	}
@@ -36,6 +39,7 @@ func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a Account
 		if err := rows.Scan(&a.ID, &a.Name, &a.Balance); err != nil {
+			h.logger.Error("failed to scan account", "error", err)
 			errInternal(w)
 			return
 		}
@@ -72,6 +76,7 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	).Scan(&account.ID, &account.Name, &account.Balance)
 
 	if err != nil {
+		h.logger.Error("failed to create account", "error", err)
 		errInternal(w)
 		return
 	}
@@ -92,6 +97,7 @@ func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.db.ExecContext(r.Context(), "DELETE FROM accounts WHERE id = $1", id)
 	if err != nil {
+		h.logger.Error("failed to delete account", "error", err)
 		errInternal(w)
 		return
 	}
@@ -125,6 +131,7 @@ func (h *AccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		h.logger.Error("failed to query account", "error", err)
 		errInternal(w)
 		return
 	}
@@ -172,6 +179,7 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		h.logger.Error("failed to update account", "error", err)
 		errInternal(w)
 		return
 	}
@@ -217,6 +225,7 @@ func (h *AccountHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		errNotFound(w, "account not found")
 		return
 	} else if err != nil {
+		h.logger.Error("failed to query account summary", "error", err)
 		errInternal(w)
 		return
 	}

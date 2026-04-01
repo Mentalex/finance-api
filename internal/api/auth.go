@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -15,11 +15,12 @@ import (
 )
 
 type AuthHandler struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewAuthHandler(db *sql.DB) *AuthHandler {
-	return &AuthHandler{db: db}
+func NewAuthHandler(db *sql.DB, logger *slog.Logger) *AuthHandler {
+	return &AuthHandler{db: db, logger: logger}
 }
 
 type authInput struct {
@@ -41,6 +42,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 	if err != nil {
+		h.logger.Error("failed to hash password", "error", err)
 		errInternal(w)
 		return
 	}
@@ -57,8 +59,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			errConflict(w, "email already in use")
 			return
 		}
+		h.logger.Error("failed to create user", "error", err)
 		errInternal(w)
-		log.Println("Failed to create user, error:", err)
 		return
 	}
 
@@ -84,6 +86,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		h.logger.Error("failed to query user", "error", err)
 		errInternal(w)
 		return
 	}
@@ -100,6 +103,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 	if err != nil {
+		h.logger.Error("failed to sign JWT", "error", err)
 		errInternal(w)
 		return
 	}

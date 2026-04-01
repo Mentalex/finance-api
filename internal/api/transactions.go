@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -22,11 +23,12 @@ type Transaction struct {
 }
 
 type TransactionHandler struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewTransactionHandler(db *sql.DB) *TransactionHandler {
-	return &TransactionHandler{db: db}
+func NewTransactionHandler(db *sql.DB, logger *slog.Logger) *TransactionHandler {
+	return &TransactionHandler{db: db, logger: logger}
 }
 
 func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +41,7 @@ func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.QueryContext(r.Context(), "SELECT * FROM transactions WHERE account_id = $1 ORDER BY created_at DESC", accountID)
 	if err != nil {
+		h.logger.Error("failed to query transactions", "error", err)
 		errInternal(w)
 		return
 	}
@@ -48,6 +51,7 @@ func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var t Transaction
 		if err := rows.Scan(&t.ID, &t.AccountID, &t.Amount, &t.Type, &t.Description, &t.CreatedAt); err != nil {
+			h.logger.Error("failed to scan transaction", "error", err)
 			errInternal(w)
 			return
 		}
@@ -88,6 +92,7 @@ func (h *TransactionHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		h.logger.Error("failed to query transaction", "error", err)
 		errInternal(w)
 		return
 	}
@@ -127,6 +132,7 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	dbTx, err := h.db.BeginTx(r.Context(), nil)
 	if err != nil {
+		h.logger.Error("failed to begin transaction", "error", err)
 		errInternal(w)
 		return
 	}
@@ -144,6 +150,7 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 			errNotFound(w, "account not found")
 			return
 		}
+		h.logger.Error("failed to create transaction", "error", err)
 		errInternal(w)
 		return
 	}
@@ -164,11 +171,13 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 			errUnprocessable(w, "insufficient funds")
 			return
 		}
+		h.logger.Error("failed to update account balance", "error", err)
 		errInternal(w)
 		return
 	}
 
 	if err := dbTx.Commit(); err != nil {
+		h.logger.Error("failed to commit transaction", "error", err)
 		errInternal(w)
 		return
 	}
