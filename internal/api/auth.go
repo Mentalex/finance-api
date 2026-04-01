@@ -30,18 +30,18 @@ type authInput struct {
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var input authInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		errBadRequest(w, "invalid request body")
 		return
 	}
 
 	if input.Email == "" || input.Password == "" {
-		http.Error(w, "Email and password required", http.StatusUnprocessableEntity)
+		errUnprocessable(w, "email and password required")
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 
@@ -54,10 +54,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			http.Error(w, "Email already in use", http.StatusConflict)
+			errConflict(w, "email already in use")
 			return
 		}
-		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		errInternal(w)
 		log.Println("Failed to create user, error:", err)
 		return
 	}
@@ -68,7 +68,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var input authInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		errBadRequest(w, "invalid request body")
 		return
 	}
 
@@ -80,16 +80,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&userID, &passwordHash)
 
 	if err == sql.ErrNoRows {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		errUnauthorized(w, "invalid credentials")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(input.Password)); err != nil {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		errUnauthorized(w, "invalid credentials")
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 	if err != nil {
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 

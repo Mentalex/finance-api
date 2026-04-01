@@ -27,7 +27,7 @@ func NewAccountsHandler(db *sql.DB) *AccountHandler {
 func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.QueryContext(r.Context(), "SELECT * FROM accounts")
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 	defer rows.Close()
@@ -36,7 +36,7 @@ func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a Account
 		if err := rows.Scan(&a.ID, &a.Name, &a.Balance); err != nil {
-			http.Error(w, "scan error", http.StatusInternalServerError)
+			errInternal(w)
 			return
 		}
 		accounts = append(accounts, a)
@@ -54,13 +54,13 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Decode the JSON body into the input struct
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest) // Return a 400 Bad Request
+		errBadRequest(w, "invalid JSON")
 		return
 	}
 
 	// Validate the input - name is required
 	if input.Name == "" {
-		http.Error(w, "name is required", http.StatusUnprocessableEntity) // Return a 422 Unprocessable Entity
+		errUnprocessable(w, "name is required")
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	).Scan(&account.ID, &account.Name, &account.Balance)
 
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 
@@ -86,19 +86,19 @@ func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	if _, err := uuid.Parse(id); err != nil {
-		http.Error(w, "invalid ID format", http.StatusBadRequest)
+		errBadRequest(w, "invalid ID format")
 		return
 	}
 
 	result, err := h.db.ExecContext(r.Context(), "DELETE FROM accounts WHERE id = $1", id)
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil || rowsAffected == 0 {
-		http.Error(w, "ID doesn't exist", http.StatusNotFound) // Return a 404 Not Found if the ID doesn't exist
+		errNotFound(w, "ID doesn't exist")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *AccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	if _, err := uuid.Parse(id); err != nil {
-		http.Error(w, "invalid ID format", http.StatusBadRequest)
+		errBadRequest(w, "invalid ID format")
 		return
 	}
 
@@ -120,12 +120,12 @@ func (h *AccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 	).Scan(&account.ID, &account.Name, &account.Balance)
 
 	if err == sql.ErrNoRows {
-		http.Error(w, "ID doesn't exist", http.StatusNotFound) // Return a 404 Not Found if the ID doesn't exist
+		errNotFound(w, "ID doesn't exist")
 		return
 	}
 
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError) // Return a 500 Internal Server Error for any database issues
+		errInternal(w)
 		return
 	}
 
@@ -138,7 +138,7 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	if _, err := uuid.Parse(id); err != nil {
-		http.Error(w, "invalid ID format", http.StatusBadRequest)
+		errBadRequest(w, "invalid ID format")
 		return
 	}
 
@@ -149,13 +149,13 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Decode the JSON body into the input struct
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest) // Return a 400 Bad Request
+		errBadRequest(w, "invalid JSON")
 		return
 	}
 
 	// Validate the input - name is required
 	if input.Name == "" {
-		http.Error(w, "name is required", http.StatusUnprocessableEntity) // Return a 422 Unprocessable Entity
+		errUnprocessable(w, "name is required")
 		return
 	}
 
@@ -167,12 +167,12 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	).Scan(&account.ID, &account.Name, &account.Balance)
 
 	if err == sql.ErrNoRows {
-		http.Error(w, "ID doesn't exist", http.StatusNotFound) // Return a 404 Not Found if the ID doesn't exist
+		errNotFound(w, "ID doesn't exist")
 		return
 	}
 
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError) // Return a 500 Internal Server Error for any database issues
+		errInternal(w)
 		return
 	}
 
@@ -214,10 +214,10 @@ func (h *AccountHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err := g.Wait(); err == sql.ErrNoRows {
-		http.Error(w, "account not found", http.StatusNotFound)
+		errNotFound(w, "account not found")
 		return
 	} else if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 

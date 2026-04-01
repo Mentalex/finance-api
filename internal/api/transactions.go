@@ -33,13 +33,13 @@ func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 	accountID := chi.URLParam(r, "id")
 	_, err := uuid.Parse(accountID)
 	if accountID == "" || err != nil {
-		http.Error(w, "Account ID is required and must be a valid UUID", http.StatusBadRequest)
+		errBadRequest(w, "account ID is required and must be a valid UUID")
 		return
 	}
 
 	rows, err := h.db.QueryContext(r.Context(), "SELECT * FROM transactions WHERE account_id = $1 ORDER BY created_at DESC", accountID)
 	if err != nil {
-		http.Error(w, "failed to query transactions", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 	defer rows.Close()
@@ -48,7 +48,7 @@ func (h *TransactionHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var t Transaction
 		if err := rows.Scan(&t.ID, &t.AccountID, &t.Amount, &t.Type, &t.Description, &t.CreatedAt); err != nil {
-			http.Error(w, "failed to scan transaction", http.StatusInternalServerError)
+			errInternal(w)
 			return
 		}
 		txns = append(txns, t)
@@ -64,17 +64,17 @@ func (h *TransactionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	txID := chi.URLParam(r, "txID")
 
 	if accountID == "" || txID == "" {
-		http.Error(w, "Account ID and Transaction ID are required", http.StatusBadRequest)
+		errBadRequest(w, "account ID and Transaction ID are required")
 		return
 	}
 
 	if _, err := uuid.Parse(accountID); err != nil {
-		http.Error(w, "Account ID must be a valid UUID", http.StatusBadRequest)
+		errBadRequest(w, "account ID must be a valid UUID")
 		return
 	}
 
 	if _, err := uuid.Parse(txID); err != nil {
-		http.Error(w, "Transaction ID must be a valid UUID", http.StatusBadRequest)
+		errBadRequest(w, "transaction ID must be a valid UUID")
 		return
 	}
 
@@ -84,11 +84,11 @@ func (h *TransactionHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"SELECT * FROM transactions WHERE id = $1 AND account_id = $2", txID, accountID,
 	).Scan(&tx.ID, &tx.AccountID, &tx.Amount, &tx.Type, &tx.Description, &tx.CreatedAt)
 	if err == sql.ErrNoRows {
-		http.Error(w, "Transaction not found", http.StatusNotFound)
+		errNotFound(w, "transaction not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "failed to query transaction", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *TransactionHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	accountID := chi.URLParam(r, "id")
 	if _, err := uuid.Parse(accountID); err != nil {
-		http.Error(w, "Account ID must be a valid UUID", http.StatusBadRequest)
+		errBadRequest(w, "account ID must be a valid UUID")
 		return
 	}
 
@@ -111,23 +111,23 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		errBadRequest(w, "invalid request body")
 		return
 	}
 
 	if input.Amount <= 0 {
-		http.Error(w, "Amount must be greater than 0", http.StatusUnprocessableEntity)
+		errUnprocessable(w, "amount must be greater than 0")
 		return
 	}
 
 	if input.Type != "deposit" && input.Type != "withdrawal" {
-		http.Error(w, "Type must be 'deposit' or 'withdrawal'", http.StatusUnprocessableEntity)
+		errUnprocessable(w, "type must be 'deposit' or 'withdrawal'")
 		return
 	}
 
 	dbTx, err := h.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		http.Error(w, "failed to begin transaction", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 	defer dbTx.Rollback()
@@ -141,10 +141,10 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			http.Error(w, "account not found", http.StatusNotFound)
+			errNotFound(w, "account not found")
 			return
 		}
-		http.Error(w, "failed to create transaction", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 
@@ -161,15 +161,15 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
-			http.Error(w, "insufficient funds", http.StatusUnprocessableEntity)
+			errUnprocessable(w, "insufficient funds")
 			return
 		}
-		http.Error(w, "failed to update account balance", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 
 	if err := dbTx.Commit(); err != nil {
-		http.Error(w, "failed to commit transaction", http.StatusInternalServerError)
+		errInternal(w)
 		return
 	}
 
