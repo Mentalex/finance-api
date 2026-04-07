@@ -12,6 +12,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 func main() {
@@ -32,6 +36,7 @@ func main() {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
+	runMigrations(db)
 	slog.Info("connected to database")
 
 	r := chi.NewRouter()
@@ -69,4 +74,29 @@ func main() {
 
 	slog.Info("server running", "port", 8080)
 	http.ListenAndServe(":8080", r)
+}
+
+func runMigrations(db *sql.DB) {
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		slog.Error("failed to create migration driver", "error", err)
+		os.Exit(1)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://migrations",
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		slog.Error("failed to create migrator", "error", err)
+		os.Exit(1)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("migrations applied")
 }
