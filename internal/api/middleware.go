@@ -13,6 +13,11 @@ type contextKey string
 
 const userIDKey contextKey = "userID"
 
+func getUserID(r *http.Request) string {
+	id, _ := r.Context().Value(userIDKey).(string)
+	return id
+}
+
 // AuthMiddleware validates Bearer token from Authorization header
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

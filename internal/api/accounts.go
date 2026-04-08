@@ -27,7 +27,8 @@ func NewAccountHandler(db *sql.DB, logger *slog.Logger) *AccountHandler {
 }
 
 func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.QueryContext(r.Context(), "SELECT id, name, balance FROM accounts")
+	userID := getUserID(r)
+	rows, err := h.db.QueryContext(r.Context(), "SELECT id, name, balance FROM accounts WHERE user_id = $1", userID)
 	if err != nil {
 		h.logger.Error("failed to query accounts", "error", err)
 		errInternal(w)
@@ -68,11 +69,13 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := getUserID(r)
+
 	var account Account
 	err := h.db.QueryRowContext(
 		r.Context(),
-		"INSERT INTO accounts (name, balance) VALUES ($1, $2) RETURNING id, name, balance",
-		input.Name, input.Balance,
+		"INSERT INTO accounts (name, balance, user_id) VALUES ($1, $2, $3) RETURNING id, name, balance",
+		input.Name, input.Balance, userID,
 	).Scan(&account.ID, &account.Name, &account.Balance)
 
 	if err != nil {
@@ -95,7 +98,8 @@ func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.db.ExecContext(r.Context(), "DELETE FROM accounts WHERE id = $1", id)
+	userID := getUserID(r)
+	result, err := h.db.ExecContext(r.Context(), "DELETE FROM accounts WHERE id = $1 AND user_id = $2", id, userID)
 	if err != nil {
 		h.logger.Error("failed to delete account", "error", err)
 		errInternal(w)
@@ -119,10 +123,11 @@ func (h *AccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := getUserID(r)
 	var account Account
 	err := h.db.QueryRowContext(
 		r.Context(),
-		"SELECT id, name, balance FROM accounts WHERE id = $1", id,
+		"SELECT id, name, balance FROM accounts WHERE id = $1 AND user_id = $2", id, userID,
 	).Scan(&account.ID, &account.Name, &account.Balance)
 
 	if err == sql.ErrNoRows {
@@ -165,11 +170,12 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := getUserID(r)
 	var account Account
 	err := h.db.QueryRowContext(
 		r.Context(),
-		"UPDATE accounts SET name = $1, balance = $2 WHERE id = $3 RETURNING id, name, balance",
-		input.Name, input.Balance, id,
+		"UPDATE accounts SET name = $1, balance = $2 WHERE id = $3 AND user_id = $4 RETURNING id, name, balance",
+		input.Name, input.Balance, id, userID,
 	).Scan(&account.ID, &account.Name, &account.Balance)
 
 	if err == sql.ErrNoRows {
@@ -196,6 +202,7 @@ func (h *AccountHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := getUserID(r)
 	var account Account
 	var transactions []Transaction
 
@@ -203,13 +210,16 @@ func (h *AccountHandler) Summary(w http.ResponseWriter, r *http.Request) {
 
 	g.Go(func() error {
 		return h.db.QueryRowContext(ctx,
-			"SELECT id, name, balance FROM accounts WHERE id = $1", id,
+			"SELECT id, name, balance FROM accounts WHERE id = $1 AND user_id = $2", id, userID,
 		).Scan(&account.ID, &account.Name, &account.Balance)
 	})
 
 	g.Go(func() error {
 		rows, err := h.db.QueryContext(ctx,
-			"SELECT id, account_id, amount, type, description, created_at FROM transactions WHERE account_id = $1", id,
+			`SELECT t.id, t.account_id, t.amount, t.type, t.description, t.created_at
+         	 FROM transactions t
+         	 JOIN accounts a ON a.id = t.account_id
+         	 WHERE t.account_id = $1 AND a.user_id = $2`, id, userID,
 		)
 		if err != nil {
 			return err
