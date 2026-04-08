@@ -9,6 +9,7 @@ A REST API for managing personal finance accounts and transactions. Built with G
 - **PostgreSQL** — database
 - **Docker** — containerization
 - **JWT** — authentication
+- **golang-migrate** — database migrations
 - **Railway** — deployment
 
 ---
@@ -44,12 +45,9 @@ JWT_SECRET=your-local-dev-secret
 docker compose up --build
 ```
 
-**4. Run migrations:**
-```bash
-docker exec -i finance-db psql -U postgres -d finance < migrations/001_init.sql
-```
+Migrations run automatically on startup via `golang-migrate`.
 
-**5. Seed the database (optional):**
+**4. Seed the database (optional):**
 ```bash
 ./scripts/seed.sh
 ```
@@ -63,7 +61,6 @@ To wipe everything and start fresh:
 ```bash
 docker compose down -v
 docker compose up --build -d
-docker exec -i finance-db psql -U postgres -d finance < migrations/001_init.sql
 ./scripts/seed.sh
 ```
 
@@ -111,13 +108,13 @@ Register a new user.
 `201 Created` — user registered successfully, no body.
 
 `409 Conflict` — email already in use.
-```
-email already in use
+```json
+{"error": "email already in use", "code": "conflict"}
 ```
 
 `422 Unprocessable Entity` — missing fields.
-```
-email and password are required
+```json
+{"error": "email and password are required", "code": "unprocessable"}
 ```
 
 ---
@@ -144,17 +141,19 @@ Login and receive a JWT token.
 ```
 
 `401 Unauthorized` — wrong email or password.
-```
-invalid credentials
+```json
+{"error": "invalid credentials", "code": "unauthorized"}
 ```
 
 ---
 
 ### Accounts
 
+All account endpoints are scoped to the authenticated user — they only return or modify accounts belonging to the user making the request.
+
 #### `GET /accounts`
 
-List all accounts.
+List all accounts belonging to the authenticated user.
 
 **Responses:**
 
@@ -200,8 +199,8 @@ Create a new account.
 ```
 
 `422 Unprocessable Entity` — missing name.
-```
-name is required
+```json
+{"error": "name is required", "code": "unprocessable"}
 ```
 
 ---
@@ -367,13 +366,13 @@ Create a transaction. Automatically updates the account balance.
 ```
 
 `422 Unprocessable Entity` — insufficient funds (withdrawal would make balance negative).
-```
-insufficient funds
+```json
+{"error": "insufficient funds", "code": "unprocessable"}
 ```
 
 `422 Unprocessable Entity` — invalid type or amount.
-```
-type must be 'deposit' or 'withdrawal'
+```json
+{"error": "type must be 'deposit' or 'withdrawal'", "code": "unprocessable"}
 ```
 
 `404 Not Found` — account doesn't exist.
@@ -456,6 +455,7 @@ CREATE TABLE users (
 
 CREATE TABLE accounts (
     id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     name    TEXT NOT NULL,
     balance NUMERIC(12, 2) NOT NULL DEFAULT 0,
     CONSTRAINT balance_non_negative CHECK (balance >= 0)
@@ -471,13 +471,15 @@ CREATE TABLE transactions (
 );
 ```
 
+Migrations are managed with [golang-migrate](https://github.com/golang-migrate/migrate) and run automatically on startup. Migration files live in `migrations/` as numbered up/down pairs (e.g. `000001_init.up.sql` / `000001_init.down.sql`).
+
 ---
 
 ## Project structure
 
 ```
 finance-api/
-├── main.go                  # entry point, router setup
+├── main.go                  # entry point, router setup, auto-migrations
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env                     # local secrets — never committed
@@ -486,7 +488,10 @@ finance-api/
 ├── go.mod
 ├── go.sum
 ├── migrations/
-│   └── 001_init.sql         # database schema
+│   ├── 000001_init.up.sql                        # initial schema
+│   ├── 000001_init.down.sql
+│   ├── 000002_add_user_id_to_accounts.up.sql     # user-scoped accounts
+│   └── 000002_add_user_id_to_accounts.down.sql
 ├── scripts/
 │   └── seed.sh              # populates the database with mock data
 └── internal/
@@ -494,5 +499,6 @@ finance-api/
         ├── accounts.go      # account handlers
         ├── transactions.go  # transaction handlers
         ├── auth.go          # register, login handlers
-        └── middleware.go    # JWT auth middleware
+        ├── middleware.go    # JWT auth middleware
+        └── errors.go        # structured JSON error helpers
 ```
