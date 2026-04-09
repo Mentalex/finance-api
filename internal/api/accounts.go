@@ -53,8 +53,8 @@ func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name    string  `json:"name"`
-		Balance float64 `json:"balance"`
+		Name    string  `json:"name" validate:"required"`
+		Balance float64 `json:"balance" validate:"gte=0"`
 	}
 
 	// Decode the JSON body into the input struct
@@ -63,9 +63,8 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the input - name is required
-	if input.Name == "" {
-		errUnprocessable(w, "name is required")
+	if fields := validateStruct(input); fields != nil {
+		errValidation(w, fields)
 		return
 	}
 
@@ -154,8 +153,8 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input struct {
-		Name    string  `json:"name"`
-		Balance float64 `json:"balance"`
+		Name    string  `json:"name" validate:"required"`
+		Balance float64 `json:"balance" validate:"gte=0"`
 	}
 
 	// Decode the JSON body into the input struct
@@ -164,9 +163,8 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the input - name is required
-	if input.Name == "" {
-		errUnprocessable(w, "name is required")
+	if fields := validateStruct(input); fields != nil {
+		errValidation(w, fields)
 		return
 	}
 

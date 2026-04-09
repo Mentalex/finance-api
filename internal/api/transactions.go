@@ -110,8 +110,8 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input struct {
-		Amount      float64 `json:"amount"`
-		Type        string  `json:"type"`
+		Amount      float64 `json:"amount" validate:"required,gt=0"`
+		Type        string  `json:"type" validate:"required,oneof=deposit withdrawal"`
 		Description string  `json:"description"`
 	}
 
@@ -120,13 +120,8 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.Amount <= 0 {
-		errUnprocessable(w, "amount must be greater than 0")
-		return
-	}
-
-	if input.Type != "deposit" && input.Type != "withdrawal" {
-		errUnprocessable(w, "type must be 'deposit' or 'withdrawal'")
+	if fields := validateStruct(input); fields != nil {
+		errValidation(w, fields)
 		return
 	}
 

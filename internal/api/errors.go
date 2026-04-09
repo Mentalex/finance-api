@@ -10,6 +10,12 @@ type APIError struct {
 	Code  string `json:"code"`
 }
 
+type ValidationError struct {
+	Error  string            `json:"error"`
+	Code   string            `json:"code"`
+	Fields map[string]string `json:"fields"`
+}
+
 func writeError(w http.ResponseWriter, message string, code string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -47,4 +53,14 @@ func errUnauthorized(w http.ResponseWriter, message string) {
 func errInternal(w http.ResponseWriter) {
 	// Return a 500 Internal Server Error
 	writeError(w, "internal server error", "internal_error", http.StatusInternalServerError)
+}
+
+func errValidation(w http.ResponseWriter, fields map[string]string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	json.NewEncoder(w).Encode(ValidationError{
+		Error:  "validation failed",
+		Code:   "validation_error",
+		Fields: fields,
+	})
 }

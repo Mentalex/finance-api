@@ -24,8 +24,8 @@ func NewAuthHandler(db *sql.DB, logger *slog.Logger) *AuthHandler {
 }
 
 type authInput struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -35,8 +35,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.Email == "" || input.Password == "" {
-		errUnprocessable(w, "email and password required")
+	if fields := validateStruct(input); fields != nil {
+		errValidation(w, fields)
 		return
 	}
 
