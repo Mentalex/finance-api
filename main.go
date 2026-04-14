@@ -42,6 +42,7 @@ func main() {
 	slog.Info("connected to database")
 
 	r := chi.NewRouter()
+	r.Use(api.SecurityHeaders) // set security headers on all responses
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(httprate.LimitByIP(100, time.Minute)) // global rate limit - 100 requests per minute per IP
