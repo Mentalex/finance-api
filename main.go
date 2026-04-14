@@ -7,9 +7,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 
@@ -42,6 +44,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(httprate.LimitByIP(100, time.Minute)) // global rate limit - 100 requests per minute per IP
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
@@ -52,8 +55,11 @@ func main() {
 	transactionHandler := api.NewTransactionHandler(db, logger)
 
 	// Auth routes
-	r.Post("/register", authHandler.Register)
-	r.Post("/login", authHandler.Login)
+	r.Group(func(r chi.Router) {
+		r.Use(httprate.LimitByIP(5, time.Minute)) // 5 attempts per minute per IP
+		r.Post("/register", authHandler.Register)
+		r.Post("/login", authHandler.Login)
+	})
 
 	r.Group(func(r chi.Router) {
 		r.Use(api.AuthMiddleware)
