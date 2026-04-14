@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 
+	"github.com/go-chi/cors"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -46,6 +48,14 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(httprate.LimitByIP(100, time.Minute)) // global rate limit - 100 requests per minute per IP
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: getAllowedOrigins(),
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Authorization", "Content-Type"},
+		ExposedHeaders: []string{"Link"},
+		MaxAge:         300, // 5 minutes
+	}))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
@@ -106,4 +116,20 @@ func runMigrations(db *sql.DB) {
 	}
 
 	slog.Info("migrations applied")
+}
+
+func getAllowedOrigins() []string {
+	origins := os.Getenv("ALLOWED_ORIGINS")
+	if origins == "" {
+		return []string{"http://localhost:3000"} // safe fallback
+	}
+
+	result := []string{}
+	for _, o := range strings.Split(origins, ",") {
+		trimmed := strings.TrimSpace(o)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
