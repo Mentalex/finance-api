@@ -44,12 +44,12 @@ func main() {
 	slog.Info("connected to database")
 
 	r := chi.NewRouter()
-	r.Use(api.SecurityHeaders) // set security headers on all responses
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(httprate.LimitByIP(100, time.Minute)) // global rate limit - 100 requests per minute per IP
-
-	r.Use(cors.Handler(cors.Options{
+	r.Use(api.SecurityHeaders)                  // set security headers on every response
+	r.Use(middleware.Logger)                    // log every request
+	r.Use(middleware.Recoverer)                 // catch panics
+	r.Use(middleware.Timeout(30 * time.Second)) // cancel slow requests
+	r.Use(httprate.LimitByIP(100, time.Minute)) // global rate limit
+	r.Use(cors.Handler(cors.Options{            // CORS settings
 		AllowedOrigins: getAllowedOrigins(),
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders: []string{"Authorization", "Content-Type"},
@@ -67,7 +67,8 @@ func main() {
 
 	// Auth routes
 	r.Group(func(r chi.Router) {
-		r.Use(httprate.LimitByIP(5, time.Minute)) // 5 attempts per minute per IP
+		// strict rate limit on auth routes
+		r.Use(httprate.LimitByIP(5, time.Minute))
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
 	})
